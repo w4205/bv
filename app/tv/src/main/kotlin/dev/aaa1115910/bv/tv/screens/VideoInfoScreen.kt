@@ -2,9 +2,11 @@ package dev.aaa1115910.bv.tv.screens
 
 import android.app.Activity
 import android.content.res.Configuration
+import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -39,7 +41,8 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Done
 import androidx.compose.material.icons.rounded.ViewModule
 import androidx.compose.material.icons.rounded.Warning
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -83,6 +86,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.tv.material3.Border
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Glow
@@ -111,9 +115,6 @@ import dev.aaa1115910.biliapi.http.BiliPlusHttpApi
 import dev.aaa1115910.biliapi.repositories.FavoriteRepository
 import dev.aaa1115910.biliapi.repositories.UserRepository
 import dev.aaa1115910.bv.R
-import dev.aaa1115910.bv.component.UpIcon
-import dev.aaa1115910.bv.component.buttons.FavoriteButton
-import dev.aaa1115910.bv.component.videocard.VideosRow
 import dev.aaa1115910.bv.entity.proxy.ProxyArea
 import dev.aaa1115910.bv.player.entity.VideoListItem
 import dev.aaa1115910.bv.player.entity.VideoListPart
@@ -124,6 +125,10 @@ import dev.aaa1115910.bv.tv.activities.video.SeasonInfoActivity
 import dev.aaa1115910.bv.tv.activities.video.TagActivity
 import dev.aaa1115910.bv.tv.activities.video.UpInfoActivity
 import dev.aaa1115910.bv.tv.activities.video.VideoInfoActivity
+import dev.aaa1115910.bv.tv.component.TvAlertDialog
+import dev.aaa1115910.bv.tv.component.UpIcon
+import dev.aaa1115910.bv.tv.component.buttons.FavoriteButton
+import dev.aaa1115910.bv.tv.component.videocard.VideosRow
 import dev.aaa1115910.bv.tv.util.launchPlayerActivity
 import dev.aaa1115910.bv.ui.theme.BVTheme
 import dev.aaa1115910.bv.util.Prefs
@@ -133,6 +138,7 @@ import dev.aaa1115910.bv.util.fWarn
 import dev.aaa1115910.bv.util.focusedBorder
 import dev.aaa1115910.bv.util.formatPubTimeString
 import dev.aaa1115910.bv.util.ifElse
+import dev.aaa1115910.bv.util.onBackPressed
 import dev.aaa1115910.bv.util.requestFocus
 import dev.aaa1115910.bv.util.swapList
 import dev.aaa1115910.bv.util.swapListWithMainContext
@@ -147,6 +153,7 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.getKoin
 import kotlin.math.ceil
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun VideoInfoScreen(
     modifier: Modifier = Modifier,
@@ -477,19 +484,27 @@ fun VideoInfoScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black)
+                .background(MaterialTheme.colorScheme.surface)
         ) {
-            Text(
-                modifier = Modifier.align(Alignment.Center),
-                text = tip
-            )
+            if (tip == "Loading") {
+                LoadingIndicator(
+                    modifier = Modifier
+                        .size(120.dp)
+                        .align(Alignment.Center),
+                )
+            } else {
+                Text(
+                    modifier = Modifier.align(Alignment.Center),
+                    text = tip
+                )
+            }
         }
     } else {
         Scaffold(
-            containerColor = Color.Black
+            modifier = modifier
         ) { innerPadding ->
             Box(
-                modifier.padding(innerPadding)
+                Modifier.padding(innerPadding)
             ) {
                 Image(
                     modifier = Modifier.fillMaxSize(),
@@ -562,13 +577,18 @@ fun VideoInfoScreen(
                                     videoInfoRepository.videoList.addAll(partVideoList)
                                 }
 
+                                val lastPlayedPage =
+                                    videoDetailViewModel.videoDetail!!.pages.find { it.cid == lastPlayedCid }
+                                val playPage = lastPlayedPage
+                                    ?: videoDetailViewModel.videoDetail!!.pages.first()
+
                                 launchPlayerActivity(
                                     context = context,
                                     avid = videoDetailViewModel.videoDetail!!.aid,
-                                    cid = videoDetailViewModel.videoDetail!!.pages.first().cid,
+                                    cid = playPage.cid,
                                     title = videoDetailViewModel.videoDetail!!.title,
-                                    partTitle = videoDetailViewModel.videoDetail!!.pages.first().title,
-                                    played = if (videoDetailViewModel.videoDetail!!.cid == lastPlayedCid) lastPlayedTime * 1000 else 0,
+                                    partTitle = playPage.title,
+                                    played = if (playPage.cid == lastPlayedCid) lastPlayedTime * 1000 else 0,
                                     fromSeason = false,
                                     isVerticalVideo = containsVerticalScreenVideo,
                                     playerIconIdle = videoDetailViewModel.videoDetail!!.playerIcon?.idle
@@ -795,7 +815,20 @@ fun VideoInfoData(
                     elevationColor = MaterialTheme.colorScheme.inverseSurface,
                     elevation = 16.dp
                 )
-            )
+            ),
+            border = if (Build.VERSION.SDK_INT < 28) {
+                ClickableSurfaceDefaults.border(
+                    focusedBorder = Border(
+                        border = BorderStroke(
+                            width = 3.dp,
+                            color = MaterialTheme.colorScheme.border
+                        ),
+                        shape = MaterialTheme.shapes.large
+                    )
+                )
+            } else {
+                ClickableSurfaceDefaults.border()
+            }
         ) {
             AsyncImage(
                 modifier = Modifier.fillMaxSize(),
@@ -1013,7 +1046,7 @@ fun VideoDescriptionDialog(
     }
 
     if (show) {
-        AlertDialog(
+        TvAlertDialog(
             modifier = modifier
                 .fillMaxWidth(0.8f),
             onDismissRequest = { onHideDialog() },
@@ -1311,6 +1344,7 @@ private fun VideoPartListDialog(
     val tabCount by remember { mutableIntStateOf(ceil(pages.size / 20.0).toInt()) }
     val selectedVideoPart = remember { mutableStateListOf<VideoPage>() }
 
+    val tabFocusRequester = remember { FocusRequester() }
     val tabRowFocusRequester = remember { FocusRequester() }
     val videoListFocusRequester = remember { FocusRequester() }
     val listState = rememberLazyGridState()
@@ -1325,12 +1359,12 @@ private fun VideoPartListDialog(
     }
 
     LaunchedEffect(show) {
-        if (show && tabCount > 1) tabRowFocusRequester.requestFocus(scope)
+        if (show && tabCount > 1) tabFocusRequester.requestFocus(scope)
         if (show && tabCount == 1) videoListFocusRequester.requestFocus(scope)
     }
 
     if (show) {
-        AlertDialog(
+        TvAlertDialog(
             modifier = modifier,
             title = { Text(text = title) },
             onDismissRequest = { onHideDialog() },
@@ -1349,14 +1383,16 @@ private fun VideoPartListDialog(
                                         listState.scrollToItem(0)
                                     }
                                 }
-                            },
+                            }
+                            .focusRestorer()
+                            .focusRequester(tabRowFocusRequester),
                         selectedTabIndex = selectedTabIndex,
                         separator = { Spacer(modifier = Modifier.width(12.dp)) },
                     ) {
                         for (i in 0 until tabCount) {
                             Tab(
                                 modifier = if (i == 0) Modifier.focusRequester(
-                                    tabRowFocusRequester
+                                    tabFocusRequester
                                 ) else Modifier,
                                 selected = i == selectedTabIndex,
                                 onFocus = { selectedTabIndex = i },
@@ -1375,6 +1411,10 @@ private fun VideoPartListDialog(
                     }
 
                     LazyVerticalGrid(
+                        modifier = Modifier
+                            .onBackPressed {
+                                if (tabCount > 1) tabRowFocusRequester.requestFocus() else onHideDialog()
+                            },
                         state = listState,
                         columns = GridCells.Fixed(2),
                         contentPadding = PaddingValues(8.dp),
@@ -1390,7 +1430,7 @@ private fun VideoPartListDialog(
 
                             VideoPartButton(
                                 modifier = buttonModifier,
-                                index = index + 1,
+                                index = page.index,
                                 title = page.title,
                                 played = 0,
                                 duration = page.duration,
@@ -1419,6 +1459,7 @@ private fun VideoUgcListDialog(
     val tabCount by remember { mutableIntStateOf(ceil(episodes.size / 20.0).toInt()) }
     val selectedVideoPart = remember { mutableStateListOf<Episode>() }
 
+    val tabFocusRequester = remember { FocusRequester() }
     val tabRowFocusRequester = remember { FocusRequester() }
     val videoListFocusRequester = remember { FocusRequester() }
     val listState = rememberLazyGridState()
@@ -1433,12 +1474,12 @@ private fun VideoUgcListDialog(
     }
 
     LaunchedEffect(show) {
-        if (show && tabCount > 1) tabRowFocusRequester.requestFocus(scope)
+        if (show && tabCount > 1) tabFocusRequester.requestFocus(scope)
         if (show && tabCount == 1) videoListFocusRequester.requestFocus(scope)
     }
 
     if (show) {
-        AlertDialog(
+        TvAlertDialog(
             modifier = modifier,
             title = { Text(text = title) },
             onDismissRequest = { onHideDialog() },
@@ -1457,14 +1498,16 @@ private fun VideoUgcListDialog(
                                         listState.scrollToItem(0)
                                     }
                                 }
-                            },
+                            }
+                            .focusRestorer()
+                            .focusRequester(tabRowFocusRequester),
                         selectedTabIndex = selectedTabIndex,
                         separator = { Spacer(modifier = Modifier.width(12.dp)) },
                     ) {
                         for (i in 0 until tabCount) {
                             Tab(
                                 modifier = if (i == 0) Modifier.focusRequester(
-                                    tabRowFocusRequester
+                                    tabFocusRequester
                                 ) else Modifier,
                                 selected = i == selectedTabIndex,
                                 onFocus = { selectedTabIndex = i },
@@ -1483,6 +1526,10 @@ private fun VideoUgcListDialog(
                     }
 
                     LazyVerticalGrid(
+                        modifier = Modifier
+                            .onBackPressed {
+                                if (tabCount > 1) tabRowFocusRequester.requestFocus() else onHideDialog()
+                            },
                         state = listState,
                         columns = GridCells.Fixed(2),
                         contentPadding = PaddingValues(8.dp),
@@ -1498,7 +1545,8 @@ private fun VideoUgcListDialog(
 
                             VideoPartButton(
                                 modifier = buttonModifier,
-                                index = index + 1,
+                                index = selectedTabIndex * 20 + index + 1,
+                                type = VideoPartType.Episode,
                                 title = episode.title,
                                 played = 0,
                                 duration = episode.duration,

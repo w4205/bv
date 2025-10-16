@@ -33,6 +33,7 @@ class SearchInputViewModel(
     val hotwords = mutableStateListOf<Hotword>()
     val suggests = mutableStateListOf<String>()
     val searchHistories = mutableStateListOf<SearchHistoryDB>()
+    val matchedSearchHistories = mutableStateListOf<SearchHistoryDB>()
 
     init {
         updateHotwords()
@@ -75,6 +76,7 @@ class SearchInputViewModel(
                 logger.info { it.stackTraceToString() }
             }
         }
+        updateMatchedSearchHistories()
     }
 
     private fun loadSearchHistories() {
@@ -83,6 +85,21 @@ class SearchInputViewModel(
             runCatching {
                 searchHistories.swapListWithMainContext(db.searchHistoryDao().getHistories(20))
                 logger.fInfo { "Load search histories finish, size: ${searchHistories.size}" }
+            }
+        }
+    }
+
+    private fun updateMatchedSearchHistories() {
+        logger.fInfo { "Update matched search histories with '$keyword'" }
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                if (keyword.isEmpty()) {
+                    matchedSearchHistories.clear()
+                } else {
+                    val matchedHistories = db.searchHistoryDao().findHistories(keyword, 20)
+                    matchedSearchHistories.swapListWithMainContext(matchedHistories)
+                }
+                logger.fInfo { "Update matched search histories finish, size: ${matchedSearchHistories.size}" }
             }
         }
     }
@@ -99,6 +116,22 @@ class SearchInputViewModel(
                 val history = SearchHistoryDB(keyword = keyword)
                 db.searchHistoryDao().insert(history)
             }
+            loadSearchHistories()
+        }
+    }
+
+    fun deleteSearchHistory(history: SearchHistoryDB) {
+        logger.fInfo { "Delete search history: ${history.keyword}" }
+        viewModelScope.launch(Dispatchers.IO) {
+            db.searchHistoryDao().delete(history)
+            loadSearchHistories()
+        }
+    }
+
+    fun deleteAllSearchHistories() {
+        logger.fInfo { "Delete all search histories" }
+        viewModelScope.launch(Dispatchers.IO) {
+            db.searchHistoryDao().deleteAll()
             loadSearchHistories()
         }
     }
